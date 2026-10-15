@@ -9,6 +9,7 @@
 |---|---|
 | صفحات البرنامج | `legacy/` (pages, reports, api, includes) |
 | توجيه الطلبات | `public/index.php` ← `legacy/router.php` |
+| ملفات الدخول | `public/login.php`، `public/pages/*.php`… (مولَّدة بـ `php artisan maqawel:stubs`) |
 | إنشاء الجداول | `php artisan maqawel:install` (`app/Console/Commands/InstallSchema.php`) |
 | المرفقات والشعارات | القرص الافتراضي لـ Laravel (Object Storage على Cloud) — `legacy/includes/storage.php` |
 | جلسات الدخول | جدول `php_sessions` في قاعدة البيانات — `legacy/includes/session.php` |
@@ -47,6 +48,15 @@ php artisan maqawel:install
 php artisan serve
 ```
 قاعدة البيانات المحلية: `maqawel` على MySQL (XAMPP). المرفقات محلياً تُحفظ في `storage/app/private/`.
+
+## إضافة صفحة جديدة
+
+بعد إضافة ملف في `legacy/pages` أو `legacy/reports` أو `legacy/api` شغّل:
+```
+php artisan maqawel:stubs
+```
+وارفع الملف المولَّد في `public/` معه. بدونه تفشل النماذج على Laravel Cloud: nginx يحوّل
+طلب ملف `.php` غير موجود إلى `index.php` كطلب GET فتضيع بيانات POST.
 
 ## حدود معروفة
 
