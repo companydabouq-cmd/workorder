@@ -49,6 +49,7 @@ if ($CONVERT && $_SERVER['REQUEST_METHOD']==='POST' && ($_POST['act']??'')==='co
     if ($s && !$s[$flag]) {
         $items=q_all("SELECT * FROM $TBL_ITEMS WHERE {$DOC}_id=?", [$id]);
         $hasMain=has_item_main();   // قبل المعاملة: إضافة عمود تُنهي أي معاملة مفتوحة
+        $hasMode=has_price_mode();  // طريقة التسعير (نفس سعر الجدول / يومي) تنتقل مع البند
         $pdo=db(); if($pdo->inTransaction())$pdo->rollBack(); $pdo->beginTransaction();
         try {
             $no=next_sequence($CONVERT['target_seq']);
@@ -69,12 +70,13 @@ if ($CONVERT && $_SERVER['REQUEST_METHOD']==='POST' && ($_POST['act']??'')==='co
                 q("UPDATE $tt SET extra_percent=?, extra_area=? WHERE id=?", [$s['extra_percent'] ?? 0, $s['extra_area'] ?? null, $newId]);
             }
             $tdoc=$CONVERT['target_doc']; $titems=$CONVERT['target_items'];
-            $sti=$pdo->prepare($hasMain
-                ? "INSERT INTO $titems ({$tdoc}_id,item_no,item_details,unit,qty,unit_price,total_before,main_no,main_name) VALUES (?,?,?,?,?,?,?,?,?)"
-                : "INSERT INTO $titems ({$tdoc}_id,item_no,item_details,unit,qty,unit_price,total_before) VALUES (?,?,?,?,?,?,?)");
+            $insCols = "{$tdoc}_id,item_no,item_details,unit,qty,unit_price,total_before"
+                     . ($hasMain ? ',main_no,main_name' : '') . ($hasMode ? ',price_mode,base_price' : '');
+            $sti=$pdo->prepare("INSERT INTO $titems ($insCols) VALUES (" . implode(',', array_fill(0, substr_count($insCols, ',') + 1, '?')) . ")");
             foreach($items as $it){
                 $v=[$newId,$it['item_no'],$it['item_details'],$it['unit'],$it['qty'],$it['unit_price'],$it['total_before']];
                 if ($hasMain) { $v[]=$it['main_no']??null; $v[]=$it['main_name']??null; }
+                if ($hasMode) { $v[]=$it['price_mode']??null; $v[]=$it['base_price']??null; }
                 $sti->execute($v);
             }
             q("UPDATE $TBL_MASTER SET $flag=1 WHERE id=?", [$id]);

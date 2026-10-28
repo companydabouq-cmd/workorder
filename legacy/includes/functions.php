@@ -418,6 +418,32 @@ function has_item_main() {
     return $ok;
 }
 
+/** عمودا «طريقة التسعير» في بنود المستندات الثلاثة:
+ *    price_mode  NULL = نفس سعر البند في جدول الكميات، 'daily' = سعر يومي (السعر ÷ 365) لبنود الصيانة السنوية
+ *    base_price  سعر البند كما في جدول الكميات (للرجوع إليه عند التبديل والتعديل)
+ *  يرجع true إن وُجدت كل الأعمدة. */
+function has_price_mode() {
+    static $ok = null;
+    if ($ok === null) {
+        $ok = true;
+        foreach (['work_survey_items', 'work_order_items', 'prelim_survey_items'] as $t) {
+            $ok = ensure_column($t, 'price_mode', "VARCHAR(10) DEFAULT NULL")    && $ok;
+            $ok = ensure_column($t, 'base_price', "DECIMAL(18,3) DEFAULT NULL") && $ok;
+        }
+    }
+    return $ok;
+}
+
+/** سعر الوحدة والمبلغ الإجمالي لبند حسب طريقة تسعيره.
+ *  اليومي: المبلغ يُحسب من السعر السنوي مباشرة (الكمية × السعر ÷ 365) حتى تساوي 365 يوماً السعرَ كاملاً،
+ *  وسعر الوحدة المعروض هو السعر ÷ 365 مقرّباً لثلاث خانات. يرجع [سعر الوحدة، المبلغ]. */
+function item_price_total($qty, $base, $mode) {
+    if ($mode === 'daily') {
+        return [round($base / 365, 3), round($qty * $base / 365, 3)];
+    }
+    return [$base, $qty * $base];
+}
+
 /* ===================================================================
  *  تنسيق جدول الكميات يتبع الترويسة المختارة في «الترويسة والتذييل».
  *  الجدول نفسه واحد يرفعه المستخدم؛ الذي يتغيّر هو شكله (أعمدته):

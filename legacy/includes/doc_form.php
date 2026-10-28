@@ -17,6 +17,7 @@ require_staff();
 $edit_id = (int)($_GET['id'] ?? 0);
 $hasMain = has_item_main();   // البند الرئيسي (رقمه واسمه) يُنسخ مع كل بند — لطباعة «دفعة الإنجاز»
 $hasExtra = has_extra();      // النسبة الإضافية لمنطقة الموقع (قبل المعاملة: إضافة الأعمدة تُنهي أي معاملة)
+$hasMode  = has_price_mode(); // طريقة تسعير البند: سعر الجدول أو يومي ÷ 365 (قبل المعاملة أيضاً)
 // نوع العمل: قائمة من أنواع أعمال العقد (المختارة في «بيانات العقد») — مع كل الترويسات.
 // رمز النوع مع الرقم (54/ت) وخانة «بيان الأعمال»: مع ترويستي «البلدية» و«المالية» فقط.
 $hasWT    = work_types_enabled();                         // الرمز وبيان الأعمال
@@ -100,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     'unit'  => trim($row['unit'] ?? ''),
                     'qty'   => (float)($row['qty'] ?? 0),
                     'price' => (float)($row['price'] ?? 0),
+                    'mode'  => ($row['mode'] ?? '') === 'daily' ? 'daily' : '',
                     'mno'   => trim($row['mno'] ?? ''),
                     'mname' => trim($row['mname'] ?? ''),
                 ];
@@ -113,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         for($i=0;$i<count($itNo);$i++){
             $itemsList[] = [
                 'no'=>trim($itNo[$i]), 'det'=>trim($itDet[$i]??''), 'unit'=>trim($itUnit[$i]??''),
-                'qty'=>(float)($itQty[$i]??0), 'price'=>(float)($itPrice[$i]??0),
+                'qty'=>(float)($itQty[$i]??0), 'price'=>(float)($itPrice[$i]??0), 'mode'=>'',
                 'mno'=>trim($itMno[$i]??''), 'mname'=>trim($itMname[$i]??''),
             ];
         }
@@ -140,15 +142,18 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                VALUES (?,?,".implode(',',$ph).")", array_merge([$no,$docDisc],$vals));
             $docId=$pdo->lastInsertId();
         }
-        // إدراج البنود
-        $sti=$pdo->prepare($hasMain
-            ? "INSERT INTO $TBL_ITEMS ({$DOC}_id,item_no,item_details,unit,qty,unit_price,total_before,main_no,main_name) VALUES (?,?,?,?,?,?,?,?,?)"
-            : "INSERT INTO $TBL_ITEMS ({$DOC}_id,item_no,item_details,unit,qty,unit_price,total_before) VALUES (?,?,?,?,?,?,?)");
+        // إدراج البنود — 'price' هو سعر البند في جدول الكميات، ويُحسب منه سعر الوحدة حسب طريقة التسعير
+        $insCols = "{$DOC}_id,item_no,item_details,unit,qty,unit_price,total_before"
+                 . ($hasMain ? ',main_no,main_name' : '') . ($hasMode ? ',price_mode,base_price' : '');
+        $sti=$pdo->prepare("INSERT INTO $TBL_ITEMS ($insCols) VALUES (" . implode(',', array_fill(0, substr_count($insCols, ',') + 1, '?')) . ")");
         foreach($itemsList as $row){
             $no=$row['no']; if($no==='') continue;
-            $qty=$row['qty']; $price=$row['price'];
-            $v=[$docId,$no,$row['det'],$row['unit'],$qty,$price,$qty*$price];
+            $qty=$row['qty']; $base=$row['price'];
+            $mode = $hasMode ? $row['mode'] : '';
+            [$unitPrice, $total] = item_price_total($qty, $base, $mode);
+            $v=[$docId,$no,$row['det'],$row['unit'],$qty,$unitPrice,$total];
             if ($hasMain) { $v[]=$row['mno']!==''?$row['mno']:null; $v[]=$row['mname']!==''?$row['mname']:null; }
+            if ($hasMode) { $v[]=$mode!==''?$mode:null; $v[]=$base; }
             $sti->execute($v);
         }
         $pdo->commit();
@@ -349,6 +354,10 @@ require __DIR__ . '/../includes/header.php';
 .im-field input:focus{outline:none;border-color:#2f5bb5;box-shadow:0 0 0 3px rgba(47,91,181,.12)}
 .im-field input.ok{border-color:#16a34a;background:#f0fdf4;color:#1a1a1a}
 .im-field input.err{border-color:#dc2626;background:#fef2f2;color:#1a1a1a}
+/* اختيار طريقة تسعير البند تحت سعر الوحدة */
+.price-mode{display:block;margin:5px auto 0;padding:3px 6px;border:1px solid #cdd3df;border-radius:6px;
+  font-size:12px;font-family:inherit;background:#f8fafc;color:#2b3242;cursor:pointer}
+.price-mode:focus{outline:none;border-color:#2f5bb5}
 /* إشعار مؤقت (toast) */
 .toast-wrap{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:11000;
   display:flex;flex-direction:column;gap:10px;align-items:center;pointer-events:none}
@@ -423,6 +432,7 @@ function calcFine(){
   document.getElementById('delay_fine').value = (Math.round(fine*1000)/1000);
 }
 var rowIdx = 0;
+var PRICE_MODE = <?= $hasMode ? 'true' : 'false' ?>;   // عمودا طريقة التسعير موجودان: يظهر اختيار «نفس سعر الجدول / يومي»
 
 // === حساب تاريخ النهاية تلقائياً من البداية + المدة ===
 function calcEnd(){
@@ -690,6 +700,7 @@ function prepareSubmit(){
       var price=tr.querySelector('input[name="it_price[]"], input[data-n="price"]');
       var mno=tr.querySelector('input[name="it_mno[]"], input[data-n="mno"]');
       var mname=tr.querySelector('input[name="it_mname[]"], input[data-n="mname"]');
+      var mode=tr.querySelector('select[name="it_mode[]"], select[data-n="mode"]');
       var no=(noInp.value||'').trim();
       if(no==='') return;
       list.push({
@@ -698,13 +709,14 @@ function prepareSubmit(){
         unit:unit?unit.value:'',
         qty:qty?parseFloat(qty.value)||0:0,
         price:price?parseFloat(price.value)||0:0,
+        mode:mode?mode.value:'',
         mno:mno?mno.value:'',
         mname:mname?mname.value:''
       });
     });
     document.getElementById('items_json').value=JSON.stringify(list);
     // أزل أسماء الحقول القديمة حتى لا تُرسل كمتغيرات منفصلة (تفادي حد max_input_vars)
-    document.querySelectorAll('#itemsBody input[name^="it_"]').forEach(function(inp){
+    document.querySelectorAll('#itemsBody input[name^="it_"], #itemsBody select[name^="it_"]').forEach(function(inp){
       inp.setAttribute('data-n', inp.getAttribute('name').replace('it_','').replace('[]',''));
       inp.removeAttribute('name');
     });
@@ -802,9 +814,26 @@ function sortItems(){
   rows.forEach(function(tr){ body.appendChild(tr); });
   recalc();
 }
-function addRow(no,det,unit,qty,price,mno,mname){
+// طريقة تسعير البند: '' = نفس سعر جدول الكميات (الافتراضي)، 'daily' = سعر يومي (السعر ÷ 365) لبنود الصيانة السنوية.
+// it_price[] يحمل دائماً سعر البند في جدول الكميات، ويُحسب منه سعر الوحدة والمبلغ هنا وفي الحفظ.
+function unitPrice(base, mode){ return mode==='daily' ? Math.round(base/365*1000)/1000 : base; }
+function lineTotal(qty, base, mode){ return mode==='daily' ? Math.round(qty*base/365*1000)/1000 : qty*base; }
+function rowTotal(tr){
+  var qty=parseFloat(tr.querySelector('input[name="it_qty[]"]').value)||0;
+  var base=parseFloat(tr.querySelector('input[name="it_price[]"]').value)||0;
+  var m=tr.querySelector('select[name="it_mode[]"]');
+  return lineTotal(qty, base, m?m.value:'');
+}
+function modeChanged(sel){
+  var tr=sel.closest('tr');
+  var base=parseFloat(tr.querySelector('input[name="it_price[]"]').value)||0;
+  tr.querySelector('.cell-price').textContent=fmt(unitPrice(base, sel.value));
+  rowChanged(tr.querySelector('input[name="it_qty[]"]'));
+}
+function addRow(no,det,unit,qty,price,mno,mname,mode){
   rowIdx++;
-  var total=qty*price, after=total*netFactor();
+  mode = mode==='daily' ? 'daily' : '';
+  var total=lineTotal(qty,price,mode), after=total*netFactor();
   var noItems=document.getElementById('noItems'); if(noItems) noItems.remove();
   var tr=document.createElement('tr');
   tr.innerHTML=
@@ -816,7 +845,10 @@ function addRow(no,det,unit,qty,price,mno,mname){
     '<td><input type="number" step="0.001" min="0" name="it_qty[]" value="'+qty+'" '+
         'style="width:80px;text-align:center;padding:5px;border:1px solid #cdd3df;border-radius:6px" '+
         'oninput="rowChanged(this)"></td>'+
-    '<td>'+fmt(price)+'<input type="hidden" name="it_price[]" value="'+price+'"></td>'+
+    '<td><span class="cell-price">'+fmt(unitPrice(price,mode))+'</span><input type="hidden" name="it_price[]" value="'+price+'">'+
+        (PRICE_MODE ? '<select name="it_mode[]" class="price-mode" onchange="modeChanged(this)" title="طريقة تسعير البند">'+
+          '<option value=""'+(mode===''?' selected':'')+'>نفس سعر الجدول</option>'+
+          '<option value="daily"'+(mode==='daily'?' selected':'')+'>يومي (÷365)</option></select>' : '')+'</td>'+
     '<td class="cell-total">'+fmt(total)+'</td>'+
     '<td class="cell-after">'+fmt(after)+'</td>'+
     '<td class="no-export"><button type="button" class="icon-btn icon-del" onclick="delItemRow(this)">🗑️</button></td>';
@@ -827,9 +859,7 @@ function delItemRow(btn){ btn.closest('tr').remove(); recalc(); }
 // عند تغيير الكمية: أعد حساب صف هذا البند ثم الإجماليات
 function rowChanged(input){
   var tr=input.closest('tr');
-  var qty=parseFloat(input.value)||0;
-  var price=parseFloat(tr.querySelector('input[name="it_price[]"]').value)||0;
-  var total=qty*price, after=total*netFactor();
+  var total=rowTotal(tr), after=total*netFactor();
   tr.querySelector('.cell-total').textContent=fmt(total);
   tr.querySelector('.cell-after').textContent=fmt(after);
   recalc();
@@ -839,8 +869,7 @@ function recalc(){
   rows.forEach(function(tr){
     var q=tr.querySelector('input[name="it_qty[]"]'); if(!q) return;
     n++; tr.querySelector('.rownum').textContent=n;
-    var qty=parseFloat(q.value)||0, price=parseFloat(tr.querySelector('input[name="it_price[]"]').value)||0;
-    sb+=qty*price;
+    sb+=rowTotal(tr);
   });
   sa=sb*netFactor();
   document.getElementById('sumBefore').textContent=fmt(sb);
@@ -852,8 +881,12 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 extraChanged();
 // تحميل بنود التعديل
 <?php if($docItems): ?>
-<?php foreach($docItems as $it): ?>
-addRow(<?= json_encode($it['item_no'],JSON_UNESCAPED_UNICODE) ?>,<?= json_encode($it['item_details'],JSON_UNESCAPED_UNICODE) ?>,<?= json_encode($it['unit'],JSON_UNESCAPED_UNICODE) ?>,<?= (float)$it['qty'] ?>,<?= (float)$it['unit_price'] ?>,<?= json_encode($it['main_no'] ?? '',JSON_UNESCAPED_UNICODE) ?>,<?= json_encode($it['main_name'] ?? '',JSON_UNESCAPED_UNICODE) ?>);
+<?php foreach($docItems as $it):
+  // البنود القديمة (قبل طريقة التسعير) بلا base_price: سعرها المحفوظ هو سعر الجدول
+  $itMode = ($it['price_mode'] ?? '') === 'daily' ? 'daily' : '';
+  $itBase = isset($it['base_price']) && $it['base_price'] !== null ? (float)$it['base_price'] : (float)$it['unit_price'];
+?>
+addRow(<?= json_encode($it['item_no'],JSON_UNESCAPED_UNICODE) ?>,<?= json_encode($it['item_details'],JSON_UNESCAPED_UNICODE) ?>,<?= json_encode($it['unit'],JSON_UNESCAPED_UNICODE) ?>,<?= (float)$it['qty'] ?>,<?= $itBase ?>,<?= json_encode($it['main_no'] ?? '',JSON_UNESCAPED_UNICODE) ?>,<?= json_encode($it['main_name'] ?? '',JSON_UNESCAPED_UNICODE) ?>,<?= json_encode($itMode) ?>);
 <?php endforeach; ?>
 sortItems();
 <?php endif; ?>
