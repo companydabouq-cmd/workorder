@@ -418,9 +418,10 @@ function has_item_main() {
     return $ok;
 }
 
-/** عمودا «طريقة التسعير» في بنود المستندات الثلاثة:
+/** أعمدة «طريقة التسعير» في بنود المستندات الثلاثة:
  *    price_mode  NULL = نفس سعر البند في جدول الكميات، 'daily' = سعر يومي (السعر ÷ 365) لبنود الصيانة السنوية
  *    base_price  سعر البند كما في جدول الكميات (للرجوع إليه عند التبديل والتعديل)
+ *    maint_days  عدد أيام الصيانة للبند اليومي
  *  يرجع true إن وُجدت كل الأعمدة. */
 function has_price_mode() {
     static $ok = null;
@@ -429,17 +430,22 @@ function has_price_mode() {
         foreach (['work_survey_items', 'work_order_items', 'prelim_survey_items'] as $t) {
             $ok = ensure_column($t, 'price_mode', "VARCHAR(10) DEFAULT NULL")    && $ok;
             $ok = ensure_column($t, 'base_price', "DECIMAL(18,3) DEFAULT NULL") && $ok;
+            $ok = ensure_column($t, 'maint_days', "INT UNSIGNED DEFAULT NULL")  && $ok;
         }
     }
     return $ok;
 }
 
+/** عدد أيام الصيانة الافتراضي للبند اليومي: سنة كاملة (= نفس سعر الجدول) */
+const MAINT_DAYS_DEFAULT = 365;
+
 /** سعر الوحدة والمبلغ الإجمالي لبند حسب طريقة تسعيره.
- *  اليومي: المبلغ يُحسب من السعر السنوي مباشرة (الكمية × السعر ÷ 365) حتى تساوي 365 يوماً السعرَ كاملاً،
- *  وسعر الوحدة المعروض هو السعر ÷ 365 مقرّباً لثلاث خانات. يرجع [سعر الوحدة، المبلغ]. */
-function item_price_total($qty, $base, $mode) {
+ *  اليومي: سعر الوحدة = السعر ÷ 365 × عدد الأيام (سعر الوحدة الواحدة عن مدة الصيانة)،
+ *  والمبلغ يُحسب من السعر السنوي مباشرة (الكمية × السعر ÷ 365 × الأيام) حتى تساوي 365 يوماً السعرَ كاملاً.
+ *  يرجع [سعر الوحدة، المبلغ]. */
+function item_price_total($qty, $base, $mode, $days = MAINT_DAYS_DEFAULT) {
     if ($mode === 'daily') {
-        return [round($base / 365, 3), round($qty * $base / 365, 3)];
+        return [round($base * $days / 365, 3), round($qty * $base * $days / 365, 3)];
     }
     return [$base, $qty * $base];
 }

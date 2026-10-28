@@ -71,12 +71,12 @@ if ($CONVERT && $_SERVER['REQUEST_METHOD']==='POST' && ($_POST['act']??'')==='co
             }
             $tdoc=$CONVERT['target_doc']; $titems=$CONVERT['target_items'];
             $insCols = "{$tdoc}_id,item_no,item_details,unit,qty,unit_price,total_before"
-                     . ($hasMain ? ',main_no,main_name' : '') . ($hasMode ? ',price_mode,base_price' : '');
+                     . ($hasMain ? ',main_no,main_name' : '') . ($hasMode ? ',price_mode,base_price,maint_days' : '');
             $sti=$pdo->prepare("INSERT INTO $titems ($insCols) VALUES (" . implode(',', array_fill(0, substr_count($insCols, ',') + 1, '?')) . ")");
             foreach($items as $it){
                 $v=[$newId,$it['item_no'],$it['item_details'],$it['unit'],$it['qty'],$it['unit_price'],$it['total_before']];
                 if ($hasMain) { $v[]=$it['main_no']??null; $v[]=$it['main_name']??null; }
-                if ($hasMode) { $v[]=$it['price_mode']??null; $v[]=$it['base_price']??null; }
+                if ($hasMode) { $v[]=$it['price_mode']??null; $v[]=$it['base_price']??null; $v[]=$it['maint_days']??null; }
                 $sti->execute($v);
             }
             q("UPDATE $TBL_MASTER SET $flag=1 WHERE id=?", [$id]);
