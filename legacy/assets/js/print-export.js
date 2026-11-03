@@ -217,17 +217,80 @@
 
   function wrapBase64(b64) { return b64.replace(/.{1,76}/g, '$&\r\n'); }
 
+  /* Word لا يفهم flex ولا grid فيرصّ العناصر تحت بعضها (التواقيع، الترويسة، صندوق الإجماليات).
+     كل حاوية تصفّ عناصرها جنباً إلى جنب تُحوَّل في النسخة إلى جدول بلا حدود: صف لكل سطر ظاهر،
+     وخلية لكل عنصر بعرضه النسبي ومحاذاته — بالترتيب نفسه (الجدول يُعرض من اليمين كما في الصفحة). */
+  function itemRect(node) {
+    if (node.nodeType === 1) return node.getBoundingClientRect();
+    var r = document.createRange(); r.selectNodeContents(node); return r.getBoundingClientRect();
+  }
+  function layoutToTables(srcRoot, dstRoot) {
+    var src = [srcRoot].concat(Array.prototype.slice.call(srcRoot.querySelectorAll('*')));
+    var dst = [dstRoot].concat(Array.prototype.slice.call(dstRoot.querySelectorAll('*')));
+    var jobs = [];
+    src.forEach(function (el, i) {
+      if (el.closest('.toolbar') || !dst[i]) return;
+      var cs = getComputedStyle(el);
+      var isFlexRow = /flex/.test(cs.display) && !/column/.test(cs.flexDirection);
+      if (!isFlexRow && !/grid/.test(cs.display)) return;
+      var items = [];
+      Array.prototype.forEach.call(el.childNodes, function (n, k) {
+        if (n.nodeType === 3 && !n.textContent.trim()) return;
+        if (n.nodeType !== 1 && n.nodeType !== 3) return;
+        var r = itemRect(n);
+        if (!r.width && !r.height) return;                    // مخفي
+        items.push({ k: k, rect: r, style: n.nodeType === 1 ? getComputedStyle(n) : cs });
+      });
+      if (items.length < 2) return;
+      jobs.push({ src: el, dst: dst[i], cs: cs, items: items });
+    });
+    jobs.forEach(function (job) {
+      var box = job.src.getBoundingClientRect();
+      var rows = [];
+      job.items.forEach(function (it) {                       // السطر = العناصر المتقاربة في الارتفاع
+        var row = rows.filter(function (r) { return Math.abs(r.top - it.rect.top) < 4; })[0];
+        if (!row) rows.push(row = { top: it.rect.top, items: [] });
+        row.items.push(it);
+      });
+      var even = /space-(between|around|evenly)/.test(job.cs.justifyContent);
+      var valign = /center/.test(job.cs.alignItems) ? 'middle' : (/end|baseline/.test(job.cs.alignItems) ? 'bottom' : 'top');
+      var dstKids = Array.prototype.slice.call(job.dst.childNodes);
+      var table = document.createElement('table');
+      table.setAttribute('width', '100%');
+      table.setAttribute('style', 'width:100%;border-collapse:collapse;border:none;margin:0');
+      rows.forEach(function (row) {
+        var tr = table.insertRow();
+        row.items.forEach(function (it) {
+          var td = tr.insertCell();
+          var pct = even ? 100 / row.items.length : Math.max(1, Math.round(it.rect.width / (box.width || 1) * 100));
+          td.setAttribute('width', pct.toFixed(0) + '%');
+          td.setAttribute('valign', valign);
+          td.setAttribute('style', 'border:none;padding:0 4px;vertical-align:' + valign + ';text-align:' + it.style.textAlign);
+          if (dstKids[it.k]) td.appendChild(dstKids[it.k]);
+        });
+      });
+      while (job.dst.firstChild) job.dst.removeChild(job.dst.firstChild);
+      job.dst.appendChild(table);
+    });
+  }
+
   window.exportWord = function () {
     var landscape = !!document.querySelector('.lp');
+    // رقم ثابت لكل صورة: يبقى ربطها بنسختها صحيحاً بعد نقل العناصر إلى الجداول
+    var srcImgs = Array.prototype.slice.call(document.body.querySelectorAll('img'));
+    srcImgs.forEach(function (img, i) { img.setAttribute('data-xi', i); });
     var clone = document.body.cloneNode(true);
+    srcImgs.forEach(function (img) { img.removeAttribute('data-xi'); });
+    layoutToTables(document.body, clone);   // قبل حذف أي عنصر: النسخة تطابق الصفحة عنصراً بعنصر
     Array.prototype.forEach.call(clone.querySelectorAll('.toolbar, script, .no-export'), function (el) { el.remove(); });
 
-    var srcImgs = Array.prototype.slice.call(document.body.querySelectorAll('img'));
-    var dstImgs = Array.prototype.slice.call(clone.querySelectorAll('img'));
+    var dstImgs = srcImgs.map(function (img, i) { return clone.querySelector('img[data-xi="' + i + '"]'); });
 
     Promise.all(srcImgs.map(imageToPng)).then(function (pngs) {
       var images = [];
       dstImgs.forEach(function (img, i) {
+        if (!img) return;                                    // صورة داخل جزء محذوف (شريط الأزرار)
+        img.removeAttribute('data-xi');
         var w = srcImgs[i].getBoundingClientRect().width, h = srcImgs[i].getBoundingClientRect().height;
         if (!pngs[i]) { img.remove(); return; }
         var loc = 'image' + (i + 1) + '.png';
