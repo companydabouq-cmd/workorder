@@ -85,7 +85,7 @@ body{font-family:'Tajawal',sans-serif;direction:rtl;color:#111;font-size:11px;ba
 .rpt-title{text-align:center;font-size:16px;font-weight:800;margin:12px 0 4px}
 .rpt-period{text-align:center;font-size:12px;font-weight:700;margin-bottom:10px}
 table{width:100%;border-collapse:collapse;margin-top:6px}
-th{border:1px solid #333;background:#eef0f3;padding:5px;font-size:10px;font-weight:800}
+th{border:1px solid #333;background:#1e9e4a;color:#fff;padding:5px;font-size:10px;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 td{border:1px solid #333;padding:4px 5px;font-size:9.5px;text-align:center}
 tbody tr:nth-child(even){background:#f7f8fa}
 tfoot td{font-weight:800;background:#eef0f3;font-size:11px}
@@ -94,7 +94,8 @@ tfoot td{font-weight:800;background:#eef0f3;font-size:11px}
 @media print{.toolbar{display:none}body{padding:0}}
 @page{size:A4;margin:8mm}
 </style></head><body>
-<div class="toolbar"><button onclick="window.print()">🖨️ طباعة</button></div>
+<div class="toolbar"><button onclick="window.print()">🖨️ طباعة</button> <button onclick="exportExcel('body > table')">📊 Excel</button> <button onclick="exportWord()">📝 Word</button></div>
+<script src="<?= base_url('assets/js/print-export.js') ?>?v=<?= filemtime(__DIR__.'/../assets/js/print-export.js') ?>"></script>
 <div class="head">
   <div class="r"><?= e($ministry) ?><br><?= e($headDept) ?></div>
   <div class="c"><img src="<?= e($logo) ?>" alt="logo"></div>

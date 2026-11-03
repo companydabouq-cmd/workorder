@@ -105,7 +105,7 @@ $rightLines = array_values(array_filter([$ministry, $PS['head_right_line2'], $PS
   /* ===== الجدول ===== */
   .pbody{flex:1 1 auto;min-height:0;overflow:hidden}
   table.pt{width:100%;border-collapse:collapse;border:1.5px solid #000}
-  table.pt th{background:#6f9fd8;border:1px solid #000;padding:6px 3px;font-size:12px;font-weight:700;line-height:1.3}
+  table.pt th{background:#1e9e4a;color:#fff;border:1px solid #000;padding:6px 3px;font-size:12px;font-weight:700;line-height:1.3;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   table.pt td{border:1px solid #000;padding:5px 4px;font-size:11.5px;text-align:center;vertical-align:middle;line-height:1.45}
   table.pt td.det{text-align:right}
   table.pt td.empty{color:#888;padding:14px}
@@ -147,7 +147,8 @@ $rightLines = array_values(array_filter([$ministry, $PS['head_right_line2'], $PS
 </style>
 </head>
 <body>
-<div class="toolbar"><button onclick="window.print()">🖨️ طباعة</button></div>
+<div class="toolbar"><button onclick="window.print()">🖨️ طباعة</button><button onclick="exportExcel('table.pt')">📊 Excel</button><button onclick="exportWord()">📝 Word</button></div>
+<script src="<?= base_url('assets/js/print-export.js') ?>?v=<?= filemtime(__DIR__.'/../assets/js/print-export.js') ?>"></script>
 
 <!-- ===== صفحة (تُنسخ في المتصفح لكل صفحة إضافية) ===== -->
 <div class="pp items-page">

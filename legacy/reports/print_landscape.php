@@ -173,7 +173,7 @@ $V = compact('PS', 'contract', 'contractor', 'logo', 'logo2', 'DOC_TITLE', 'docN
   /* ===== الجدول ===== */
   .lbody{flex:1 1 auto;min-height:0;overflow:hidden}
   table.lt{width:100%;border-collapse:collapse;border:1.5px solid #000}
-  table.lt th{background:#e3e3e3;border:1px solid #000;padding:5px 4px;font-size:13px;font-weight:700}
+  table.lt th{background:#1e9e4a;color:#fff;border:1px solid #000;padding:5px 4px;font-size:13px;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   table.lt td{border:1px solid #000;padding:7px 6px;font-size:12px;text-align:center;vertical-align:middle;font-weight:700}
   table.lt td.det{text-align:right;color:#1c2fa8;line-height:1.55}
   table.lt td.price{color:#c0141b}
@@ -230,7 +230,10 @@ $V = compact('PS', 'contract', 'contractor', 'logo', 'logo2', 'DOC_TITLE', 'docN
 <body>
 <div class="toolbar">
   <button onclick="window.print()">🖨️ طباعة</button>
+  <button onclick="exportExcel('table.lt')">📊 Excel</button>
+  <button onclick="exportWord()">📝 Word</button>
 </div>
+<script src="<?= base_url('assets/js/print-export.js') ?>?v=<?= filemtime(__DIR__.'/../assets/js/print-export.js') ?>"></script>
 
 <?php if ($PS['l_cover'] === '1'): ?>
 <!-- ===== صفحة الغلاف ===== -->

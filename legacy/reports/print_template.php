@@ -140,8 +140,8 @@ $CLOSE = [
   table.items{width:100%;border-collapse:collapse;margin-top:8px;border:2px solid #1a1a1a}
   table.items thead{display:table-header-group}
   table.items tr{page-break-inside:avoid}
-  table.items th.rpt-head-cell{border:none;border-bottom:2px solid #1a1a1a;background:transparent;padding:0 0 8px;font-weight:400;text-align:right}
-  table.items th{border:1px solid #333;background:#eef0f3;padding:6px;font-size:11px;font-weight:800}
+  table.items th.rpt-head-cell{border:none;border-bottom:2px solid #1a1a1a;background:transparent;color:inherit;padding:0 0 8px;font-weight:400;text-align:right}
+  table.items th{border:1px solid #333;background:#1e9e4a;color:#fff;padding:6px;font-size:11px;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   table.items td{border:1px solid #333;padding:5px 6px;font-size:10.5px;vertical-align:top}
   table.items .c{text-align:center}
   table.items tbody tr:nth-child(even){background:#f7f8fa}
@@ -220,7 +220,10 @@ $CLOSE = [
 <body>
 <div class="toolbar">
   <button onclick="window.print()">🖨️ طباعة</button>
+  <button onclick="exportExcel('table.items')">📊 Excel</button>
+  <button onclick="exportWord()">📝 Word</button>
 </div>
+<script src="<?= base_url('assets/js/print-export.js') ?>?v=<?= filemtime(__DIR__.'/../assets/js/print-export.js') ?>"></script>
 
 <script>
 /* ===== كتلة التواقيع وتوزيع الفراغ (بالقياس الفعلي لا بالتقدير) =====
