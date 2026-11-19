@@ -35,6 +35,12 @@ function legacy_route(string $legacyDir): ?string
         $rel .= 'index.php';
     }
 
+    // Laravel Cloud لا يمرّر إلا index.php من ملفات .php — فالصفحات تُطلب بلا امتداد
+    // (/login ، /pages/work_orders) ونحوّلها هنا إلى ملفها.
+    if (!str_ends_with($rel, '.php') && preg_match('#^((pages|reports|api)/)?[A-Za-z0-9_\-]+$#', $rel)) {
+        $rel .= '.php';
+    }
+
     $allowed = preg_match('#^(index|login|logout)\.php$#', $rel)
             || preg_match('#^(pages|reports|api)/[A-Za-z0-9_\-]+\.php$#', $rel);
     $file = $legacyDir . '/' . $rel;
@@ -52,7 +58,51 @@ function legacy_route(string $legacyDir): ?string
     $_SERVER['SCRIPT_FILENAME'] = $file;
     chdir(dirname($file));
 
+    legacy_strip_php_urls($legacyDir);
+
     return $file;
+}
+
+/**
+ * يحذف ".php" من روابط صفحات البرنامج في الإخراج وفي التحويلات (Location)،
+ * لأن Laravel Cloud يرد "Not found" على أي رابط ينتهي بـ .php غير index.php.
+ * لا يلمس إلا أسماء صفحات موجودة فعلاً، ولا يلمس ملفات التنزيل (Excel/Word).
+ */
+function legacy_strip_php_urls(string $legacyDir): void
+{
+    $names = [];
+    foreach (array_merge(glob($legacyDir . '/*.php') ?: [], glob($legacyDir . '/{pages,reports,api}/*.php', GLOB_BRACE) ?: []) as $f) {
+        $names[basename($f, '.php')] = true;
+    }
+    unset($names['router'], $names['install']);
+
+    $strip = static function (string $text) use ($names): string {
+        return preg_replace_callback(
+            '#(?<![\w\-.])([A-Za-z0-9_\-]+)\.php(?=$|[?\#\x22\x27\s)<&\\\\])#',
+            static fn ($m) => isset($names[$m[1]]) ? $m[1] : $m[0],
+            $text
+        ) ?? $text;
+    };
+
+    header_register_callback(static function () use ($strip) {
+        foreach (headers_list() as $h) {
+            if (stripos($h, 'Location:') === 0) {
+                header('Location: ' . $strip(trim(substr($h, 9))));
+            }
+        }
+    });
+
+    ob_start(static function (string $out) use ($strip): string {
+        foreach (headers_list() as $h) {
+            if (stripos($h, 'Content-Type:') === 0 && !preg_match('#text/html|javascript|json#i', $h)) {
+                return $out;
+            }
+            if (stripos($h, 'Content-Disposition:') === 0) {
+                return $out;
+            }
+        }
+        return $strip($out);
+    });
 }
 
 function legacy_serve_stored(string $legacyDir, string $rel): void
